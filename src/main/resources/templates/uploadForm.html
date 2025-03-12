@@ -1,20 +1,131 @@
+<!DOCTYPE html>
 <html xmlns:th="https://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Przesyłanie plików</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f7fa;
+        }
+
+        h2 {
+            color: #2c3e50;
+            margin-bottom: 20px;
+            border-bottom: 2px solid #3498db;
+            padding-bottom: 10px;
+        }
+
+        .container {
+            background-color: #fff;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            padding: 25px;
+            margin-bottom: 25px;
+        }
+
+        form {
+            margin-bottom: 20px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        td {
+            padding: 12px 5px;
+        }
+
+        input[type="file"] {
+            border: 1px solid #ddd;
+            padding: 8px;
+            width: 100%;
+            border-radius: 4px;
+        }
+
+        input[type="submit"] {
+            background-color: #3498db;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: background-color 0.3s ease;
+        }
+
+        input[type="submit"]:hover {
+            background-color: #2980b9;
+        }
+
+        ul {
+            list-style-type: none;
+            padding: 0;
+        }
+
+        li {
+            padding: 10px;
+            margin-bottom: 8px;
+            background-color: #f1f5f9;
+            border-radius: 4px;
+            border-left: 4px solid #3498db;
+        }
+
+        a {
+            color: #3498db;
+            text-decoration: none;
+            display: block;
+            transition: color 0.3s ease;
+        }
+
+        a:hover {
+            color: #2980b9;
+            text-decoration: underline;
+        }
+
+        .message {
+            background-color: #d4edda;
+            color: #155724;
+            padding: 15px;
+            border-radius: 4px;
+            margin-bottom: 20px;
+            border-left: 4px solid #28a745;
+        }
+    </style>
+</head>
 <body>
 
-<div th:if="${message}">
-    <h2 th:text="${message}"/>
+<div class="container" th:if="${message}">
+    <div class="message">
+        <h2 th:text="${message}"/>
+    </div>
 </div>
 
-<div>
+<div class="container">
+    <h2>Prześlij plik</h2>
     <form method="POST" enctype="multipart/form-data" action="/">
         <table>
-            <tr><td>File to upload:</td><td><input type="file" name="file" /></td></tr>
-            <tr><td></td><td><input type="submit" value="Upload" /></td></tr>
+            <tr>
+                <td>Wybierz plik:</td>
+                <td><input type="file" name="file" /></td>
+            </tr>
+            <tr>
+                <td></td>
+                <td><input type="submit" value="Prześlij" /></td>
+            </tr>
         </table>
     </form>
 </div>
 
-<div>
+<div class="container" th:if="${not #lists.isEmpty(files)}">
+    <h2>Przesłane pliki</h2>
     <ul>
         <li th:each="file : ${files}">
             <a th:href="${file}" th:text="${file}" />

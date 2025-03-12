@@ -60,6 +60,18 @@ public class FileUploadController {
     @PostMapping("/")
     public String handleFileUpload(@RequestParam("file") MultipartFile file, RedirectAttributes redirectAttributes)
     {
+        
+        if(file.isEmpty()) {
+            redirectAttributes.addFlashAttribute("message", "Please select a file");
+            return "redirect:/";
+        }
+        
+        String originalFileName = file.getOriginalFilename();
+        if (originalFileName == null || !originalFileName.toLowerCase().endsWith(".mp3")){
+            redirectAttributes.addFlashAttribute("message", "Please select a .mp3 file");
+            return "redirect:/";
+        }
+        
         storageService.store(file);
         redirectAttributes.addFlashAttribute("message" + "You successfully uploaded" + file.getOriginalFilename() + "!");
         return "redirect:/";

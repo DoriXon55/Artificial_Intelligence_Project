@@ -13,6 +13,8 @@ def main():
     text = result["text"]
     max_words = 200  # ilosc slow aby pozostac pod limitem (okolo 200)
     
+    
+    
     # Take text from beginning, middle and end for better context
     words = text.split()
     if len(words) > 600:  # if text is long enough
