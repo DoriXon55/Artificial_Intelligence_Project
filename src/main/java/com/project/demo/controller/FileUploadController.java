@@ -1,9 +1,14 @@
 package com.project.demo.controller;
 
 
+import java.io.BufferedReader;
+import java.io.File;
 import java.io.IOException;
+import java.io.InputStreamReader;
 import java.util.stream.Collectors;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.project.demo.exceptions.StorageFileNotFoundException;
 import com.project.demo.service.StorageService;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -58,23 +63,112 @@ public class FileUploadController {
 
 
     @PostMapping("/")
-    public String handleFileUpload(@RequestParam("file") MultipartFile file, RedirectAttributes redirectAttributes)
-    {
-        
-        if(file.isEmpty()) {
-            redirectAttributes.addFlashAttribute("message", "Please select a file");
+    public String handleFileUpload(@RequestParam("file") MultipartFile file, RedirectAttributes redirectAttributes) {
+        try {
+            if(file.isEmpty()) {
+                redirectAttributes.addFlashAttribute("message", "Please select a file");
+                return "redirect:/";
+            }
+
+            String originalFileName = file.getOriginalFilename();
+            if (originalFileName == null || !originalFileName.toLowerCase().endsWith(".mp3")) {
+                redirectAttributes.addFlashAttribute("message", "Please select a .mp3 file");
+                return "redirect:/";
+            }
+
+            // Zapisz plik
+            storageService.store(file);
+
+            // Pobierz ścieżkę do zapisanego pliku
+            String filePath = storageService.getStorageLocation().resolve(originalFileName).toAbsolutePath().toString();
+            System.out.println("Processing file: " + filePath);
+
+            // Wywołaj skrypt Python
+            String jsonOutput = processPythonScript(filePath);
+
+            // Przetwórz wynik JSON
+            String result = processResult(jsonOutput);
+
+            redirectAttributes.addFlashAttribute("processResult", result);
+            redirectAttributes.addFlashAttribute("message", "You successfully uploaded " + originalFileName + " and processed it!");
+
+            return "redirect:/";
+        } catch (Exception e) {
+            e.printStackTrace();
+            redirectAttributes.addFlashAttribute("message", "Error occurred: " + e.getMessage());
             return "redirect:/";
         }
-        
-        String originalFileName = file.getOriginalFilename();
-        if (originalFileName == null || !originalFileName.toLowerCase().endsWith(".mp3")){
-            redirectAttributes.addFlashAttribute("message", "Please select a .mp3 file");
-            return "redirect:/";
+    }
+
+    private String processPythonScript(String filePath) throws IOException, InterruptedException {
+        File file = new File(filePath);
+        if (!file.exists()) {
+            throw new IOException("File does not exist: " + filePath);
         }
-        
-        storageService.store(file);
-        redirectAttributes.addFlashAttribute("message" + "You successfully uploaded" + file.getOriginalFilename() + "!");
-        return "redirect:/";
+
+        ProcessBuilder processBuilder = new ProcessBuilder(
+                "python",  // lub pełna ścieżka do Python
+                "C:\\Users\\doria\\IdeaProjects\\AIProject\\main.py",
+                filePath
+        );
+
+        // NIE przekierowuj stderr do stdout - chcemy je rozdzielić
+        processBuilder.redirectErrorStream(false);
+
+        // Uruchomienie procesu
+        Process process = processBuilder.start();
+
+        // Odczyt standardowego wyjścia (JSON)
+        BufferedReader stdoutReader = new BufferedReader(new InputStreamReader(process.getInputStream()));
+        StringBuilder stdoutOutput = new StringBuilder();
+        String line;
+        while ((line = stdoutReader.readLine()) != null) {
+            stdoutOutput.append(line);
+        }
+
+        // Odczyt błędów (logi)
+        BufferedReader stderrReader = new BufferedReader(new InputStreamReader(process.getErrorStream()));
+        StringBuilder stderrOutput = new StringBuilder();
+        while ((line = stderrReader.readLine()) != null) {
+            stderrOutput.append(line).append("\n");
+            System.err.println("Python stderr: " + line);  // Logowanie błędów
+        }
+
+        // Czekanie na zakończenie procesu
+        int exitCode = process.waitFor();
+        if (exitCode != 0) {
+            System.err.println("Python failed with exit code: " + exitCode);
+            System.err.println("Error output: " + stderrOutput.toString());
+            throw new RuntimeException("Python script failed with exit code " + exitCode + "\nError details: " + stderrOutput.toString());
+        }
+
+        // Sprawdź czy mamy jakieś wyjście
+        String jsonOutput = stdoutOutput.toString().trim();
+        if (jsonOutput.isEmpty()) {
+            throw new RuntimeException("No output received from Python script");
+        }
+
+        // Jeśli wszystko się powiodło, zwróć JSON
+        return jsonOutput;
+    }
+
+    private String processResult(String jsonOutput) {
+        try {
+            ObjectMapper mapper = new ObjectMapper();
+            JsonNode resultJson = mapper.readTree(jsonOutput);
+
+            if (resultJson.has("error")) {
+                throw new RuntimeException("Python script error: " + resultJson.get("error").asText());
+            }
+
+            String transcription = resultJson.get("transcription").asText();
+            String summary = resultJson.get("summary").asText();
+
+            return "Transcription:\n" + transcription + "\n\nSummary:\n" + summary;
+        } catch (Exception e) {
+            System.err.println("Error parsing JSON: " + jsonOutput);
+            throw new RuntimeException("Error processing Python script output: " + e.getMessage(), e);
+        }
     }
 
 
