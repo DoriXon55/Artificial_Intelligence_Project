@@ -81,15 +81,25 @@ public class FileUploadController {
 
             // Pobierz ścieżkę do zapisanego pliku
             String filePath = storageService.getStorageLocation().resolve(originalFileName).toAbsolutePath().toString();
-            System.out.println("Processing file: " + filePath);
 
             // Wywołaj skrypt Python
             String jsonOutput = processPythonScript(filePath);
 
             // Przetwórz wynik JSON
-            String result = processResult(jsonOutput);
+            ObjectMapper mapper = new ObjectMapper();
+            JsonNode resultJson = mapper.readTree(jsonOutput);
 
-            redirectAttributes.addFlashAttribute("processResult", result);
+            if (resultJson.has("error")) {
+                throw new RuntimeException("Python script error: " + resultJson.get("error").asText());
+            }
+
+            // Zapisz transkrypcję i podsumowanie jako oddzielne atrybuty
+            String transcription = resultJson.get("transcription").asText();
+            String summary = resultJson.get("summary").asText();
+
+            redirectAttributes.addFlashAttribute("transcription", transcription);
+            redirectAttributes.addFlashAttribute("summary", summary);
+            redirectAttributes.addFlashAttribute("processResult", true);
             redirectAttributes.addFlashAttribute("message", "You successfully uploaded " + originalFileName + " and processed it!");
 
             return "redirect:/";
@@ -99,24 +109,8 @@ public class FileUploadController {
             return "redirect:/";
         }
     }
-
     private String processPythonScript(String filePath) throws IOException, InterruptedException {
-        File file = new File(filePath);
-        if (!file.exists()) {
-            throw new IOException("File does not exist: " + filePath);
-        }
-
-        ProcessBuilder processBuilder = new ProcessBuilder(
-                "python",  // lub pełna ścieżka do Python
-                "C:\\Users\\doria\\IdeaProjects\\AIProject\\main.py",
-                filePath
-        );
-
-        // NIE przekierowuj stderr do stdout - chcemy je rozdzielić
-        processBuilder.redirectErrorStream(false);
-
-        // Uruchomienie procesu
-        Process process = processBuilder.start();
+        Process process = getProcess(filePath);
 
         // Odczyt standardowego wyjścia (JSON)
         BufferedReader stdoutReader = new BufferedReader(new InputStreamReader(process.getInputStream()));
@@ -150,6 +144,26 @@ public class FileUploadController {
 
         // Jeśli wszystko się powiodło, zwróć JSON
         return jsonOutput;
+    }
+
+    private static Process getProcess(String filePath) throws IOException {
+        File file = new File(filePath);
+        if (!file.exists()) {
+            throw new IOException("File does not exist: " + filePath);
+        }
+
+        ProcessBuilder processBuilder = new ProcessBuilder(
+                "python",  // lub pełna ścieżka do Python
+                "C:\\Users\\doria\\IdeaProjects\\AIProject\\main.py",
+                filePath
+        );
+
+        // NIE przekierowuj stderr do stdout - chcemy je rozdzielić
+        processBuilder.redirectErrorStream(false);
+
+        // Uruchomienie procesu
+        Process process = processBuilder.start();
+        return process;
     }
 
     private String processResult(String jsonOutput) {
