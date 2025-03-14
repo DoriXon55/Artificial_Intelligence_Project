@@ -120,21 +120,6 @@ public class FileUploadController {
             stdoutOutput.append(line);
         }
 
-        // Odczyt błędów (logi)
-        BufferedReader stderrReader = new BufferedReader(new InputStreamReader(process.getErrorStream()));
-        StringBuilder stderrOutput = new StringBuilder();
-        while ((line = stderrReader.readLine()) != null) {
-            stderrOutput.append(line).append("\n");
-            System.err.println("Python stderr: " + line);  // Logowanie błędów
-        }
-
-        // Czekanie na zakończenie procesu
-        int exitCode = process.waitFor();
-        if (exitCode != 0) {
-            System.err.println("Python failed with exit code: " + exitCode);
-            System.err.println("Error output: " + stderrOutput.toString());
-            throw new RuntimeException("Python script failed with exit code " + exitCode + "\nError details: " + stderrOutput.toString());
-        }
 
         // Sprawdź czy mamy jakieś wyjście
         String jsonOutput = stdoutOutput.toString().trim();
