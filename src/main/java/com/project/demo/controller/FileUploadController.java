@@ -5,6 +5,8 @@ import java.io.BufferedReader;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStreamReader;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 import com.fasterxml.jackson.databind.JsonNode;
@@ -17,24 +19,23 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
-import org.springframework.web.bind.annotation.ExceptionHandler;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestParam;
-import org.springframework.web.bind.annotation.ResponseBody;
+import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.servlet.mvc.method.annotation.MvcUriComponentsBuilder;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
+import com.project.demo.controller.GeminiModelController.UserPreference;
+import jakarta.servlet.http.HttpSession;
 
 
 @Controller
 public class FileUploadController {
     private final StorageService storageService;
+    private final GeminiModelController geminiModelController;
 
     @Autowired
-    public FileUploadController(StorageService storageService) {
+    public FileUploadController(StorageService storageService, GeminiModelController geminiModelController) {
         this.storageService = storageService;
+        this.geminiModelController = geminiModelController;
     }
 
     @GetMapping("/")
@@ -60,10 +61,48 @@ public class FileUploadController {
         return ResponseEntity.ok().header(HttpHeaders.CONTENT_DISPOSITION,
                 "attachment; filename=\"" + file.getFilename() + "\"").body(file);
     }
-
+    
+    // New endpoint to get user preferences
+    @GetMapping("/api/preferences")
+    @ResponseBody
+    public Map<String, String> getUserPreferences(HttpSession session) {
+        Map<String, String> preferences = new HashMap<>();
+        UserPreference userPref = GeminiModelController.getUserPreference(session.getId());
+        
+        if (userPref != null) {
+            preferences.put("method", userPref.getProcessingMethod());
+            preferences.put("modelId", userPref.getModelId());
+        } else {
+            // Default preferences
+            preferences.put("method", "python");
+            preferences.put("modelId", "");
+        }
+        
+        return preferences;
+    }
+    
+    // New endpoint to save user preferences
+    @PostMapping("/api/preferences")
+    @ResponseBody
+    public Map<String, Boolean> saveUserPreferences(@RequestBody Map<String, String> request, HttpSession session) {
+        String method = request.get("method");
+        String modelId = request.get("modelId");
+        
+        // Save preference
+        GeminiModelController.getUserPreferences().put(
+            session.getId(), 
+            new UserPreference(method, modelId)
+        );
+        
+        Map<String, Boolean> response = new HashMap<>();
+        response.put("success", true);
+        return response;
+    }
 
     @PostMapping("/")
-    public String handleFileUpload(@RequestParam("file") MultipartFile file, RedirectAttributes redirectAttributes) {
+    public String handleFileUpload(@RequestParam("file") MultipartFile file, 
+                                   RedirectAttributes redirectAttributes,
+                                   HttpSession session) {
         try {
             if(file.isEmpty()) {
                 redirectAttributes.addFlashAttribute("message", "Please select a file");
@@ -82,25 +121,69 @@ public class FileUploadController {
             // Pobierz ścieżkę do zapisanego pliku
             String filePath = storageService.getStorageLocation().resolve(originalFileName).toAbsolutePath().toString();
 
-            // Wywołaj skrypt Python
-            String jsonOutput = processPythonScript(filePath);
-
-            // Przetwórz wynik JSON
-            ObjectMapper mapper = new ObjectMapper();
-            JsonNode resultJson = mapper.readTree(jsonOutput);
-
-            if (resultJson.has("error")) {
-                throw new RuntimeException("Python script error: " + resultJson.get("error").asText());
+            // Check user preference for processing method
+            UserPreference preference = GeminiModelController.getUserPreference(session.getId());
+            
+            String transcription;
+            String summary;
+            boolean useGemini = false;
+            String modelId = null;
+            
+            if (preference != null && "gemini".equals(preference.getProcessingMethod())) {
+                useGemini = true;
+                modelId = preference.getModelId();
+                
+                // Process with Gemini
+                // This would require extracting audio to text first, then sending to Gemini
+                // This is a simplified version
+                
+                // First get transcription with Python script
+                String jsonOutput = processPythonScript(filePath);
+                ObjectMapper mapper = new ObjectMapper();
+                JsonNode resultJson = mapper.readTree(jsonOutput);
+                
+                if (resultJson.has("error")) {
+                    throw new RuntimeException("Python script error: " + resultJson.get("error").asText());
+                }
+                
+                transcription = resultJson.get("transcription").asText();
+                
+                // Then summarize with Gemini
+                // Call GeminiModelController to process the transcription
+                String geminiSummary = "";
+                try {
+                    geminiSummary = this.geminiModelController.processWithGemini(
+                        "Summarize the following transcription into a concise paragraph: " + transcription, 
+                        modelId
+                    );
+                } catch (Exception e) {
+                    geminiSummary = "Error using Gemini API. Falling back to Python summary: " + e.getMessage();
+                    geminiSummary += "\n\n" + resultJson.get("summary").asText();
+                }
+                
+                summary = geminiSummary;
+                
+            } else {
+                // Default to Python script processing
+                String jsonOutput = processPythonScript(filePath);
+                ObjectMapper mapper = new ObjectMapper();
+                JsonNode resultJson = mapper.readTree(jsonOutput);
+                
+                if (resultJson.has("error")) {
+                    throw new RuntimeException("Python script error: " + resultJson.get("error").asText());
+                }
+                
+                transcription = resultJson.get("transcription").asText();
+                summary = resultJson.get("summary").asText();
             }
-
-            // Zapisz transkrypcję i podsumowanie jako oddzielne atrybuty
-            String transcription = resultJson.get("transcription").asText();
-            String summary = resultJson.get("summary").asText();
 
             redirectAttributes.addFlashAttribute("transcription", transcription);
             redirectAttributes.addFlashAttribute("summary", summary);
             redirectAttributes.addFlashAttribute("processResult", true);
-            redirectAttributes.addFlashAttribute("message", "You successfully uploaded " + originalFileName + " and processed it!");
+            redirectAttributes.addFlashAttribute("useGemini", useGemini);
+            redirectAttributes.addFlashAttribute("modelId", modelId);
+            redirectAttributes.addFlashAttribute("message", 
+                "You successfully uploaded " + originalFileName + " and processed it!");
 
             return "redirect:/";
         } catch (Exception e) {
@@ -139,7 +222,7 @@ public class FileUploadController {
 
         ProcessBuilder processBuilder = new ProcessBuilder(
                 "python",  // lub pełna ścieżka do Python
-                "C:\\Users\\doria\\IdeaProjects\\AIProject\\main.py",
+                "main.py",
                 filePath
         );
 
