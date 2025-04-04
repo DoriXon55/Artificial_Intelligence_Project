@@ -3,10 +3,25 @@ document.addEventListener('DOMContentLoaded', function() {
     const methodRadios = document.querySelectorAll('input[name="processingMethod"]');
     const geminiOptions = document.getElementById('geminiOptions');
     const modelSelect = document.getElementById('geminiModel');
-
+    const transcriptionContent = document.getElementById('transcriptionContent');
+    const summaryContent = document.getElementById('summaryContent');
+    const toggleTranscriptionBtn = document.getElementById('toggleTranscription');
+    const toggleSummaryBtn = document.getElementById('toggleSummary');
     document.getElementById("currentYear").textContent = new Date().getFullYear();
 
-    // Pokaż/ukryj opcje Gemini w zależności od wybranej metody
+
+    if (transcriptionContent && toggleTranscriptionBtn) {
+        transcriptionContent.style.display = 'none';
+        toggleTranscriptionBtn.innerHTML = '<i class="bi bi-eye me-1"></i> Pokaż';
+    }
+
+    if (summaryContent && toggleSummaryBtn) {
+        summaryContent.style.display = 'none';
+        toggleSummaryBtn.innerHTML = '<i class="bi bi-eye me-1"></i> Pokaż';
+    }
+    
+    
+    
     methodRadios.forEach(radio => {
         radio.addEventListener('change', function() {
             if (this.value === 'gemini') {

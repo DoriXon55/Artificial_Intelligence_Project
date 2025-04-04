@@ -5,14 +5,14 @@ import java.io.BufferedReader;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStreamReader;
-import java.util.HashMap;
-import java.util.Map;
+import java.util.*;
 import java.util.stream.Collectors;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.project.demo.exceptions.StorageFileNotFoundException;
 import com.project.demo.service.StorageService;
+import io.micrometer.core.instrument.Metrics;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.io.Resource;
 import org.springframework.http.HttpHeaders;
@@ -120,6 +120,7 @@ public class FileUploadController {
             
             String transcription;
             String summary;
+            Map<String, Double> metrics;
             boolean useGemini = false;
             String modelId = null;
             
@@ -150,6 +151,8 @@ public class FileUploadController {
                 
                 summary = geminiSummary;
                 
+                metrics = calculateMetrics(transcription, geminiSummary);
+                
             } else {
                 String jsonOutput = processPythonScript(filePath);
                 ObjectMapper mapper = new ObjectMapper();
@@ -161,10 +164,12 @@ public class FileUploadController {
                 
                 transcription = resultJson.get("transcription").asText();
                 summary = resultJson.get("summary").asText();
+                metrics = calculateMetrics(transcription, summary);
             }
 
             redirectAttributes.addFlashAttribute("transcription", transcription);
             redirectAttributes.addFlashAttribute("summary", summary);
+            redirectAttributes.addFlashAttribute("metrics", metrics);
             redirectAttributes.addFlashAttribute("processResult", true);
             redirectAttributes.addFlashAttribute("useGemini", useGemini);
             redirectAttributes.addFlashAttribute("modelId", modelId);
@@ -177,6 +182,45 @@ public class FileUploadController {
             redirectAttributes.addFlashAttribute("message", "Error occurred: " + e.getMessage());
             return "redirect:/";
         }
+    }
+
+
+    private Map<String, Double> calculateMetrics(String originalText, String summaryText) {
+        Map<String, Double> metrics = new HashMap<>();
+
+        String[] originalWords = originalText.toLowerCase()
+                .replaceAll("[^a-zA-Z0-9\\s]", "")
+                .split("\\s+");
+
+        String[] summaryWords = summaryText.toLowerCase()
+                .replaceAll("[^a-zA-Z0-9\\s]", "")
+                .split("\\s+");
+
+        // Calculate ROUGE-1 (unigrams)
+        Set<String> originalUnigrams = new HashSet<>(Arrays.asList(originalWords));
+        Set<String> summaryUnigrams = new HashSet<>(Arrays.asList(summaryWords));
+
+        // Calculate intersections
+        int matchingUnigrams = 0;
+        for (String unigram : summaryUnigrams) {
+            if (originalUnigrams.contains(unigram)) {
+                matchingUnigrams++;
+            }
+        }
+
+        double rouge1Precision = summaryUnigrams.isEmpty() ? 0.0 :
+                (matchingUnigrams / (double) summaryUnigrams.size()) * 100;
+        double rouge1Recall = originalUnigrams.isEmpty() ? 0.0 :
+                (matchingUnigrams / (double) originalUnigrams.size()) * 100;
+        double rouge1F1 = (rouge1Precision + rouge1Recall > 0) ?
+                2 * (rouge1Precision * rouge1Recall) / (rouge1Precision + rouge1Recall) : 0.0;
+
+        // Round to 2 decimal places
+        metrics.put("precision", Math.round(rouge1Precision * 100.0) / 100.0);
+        metrics.put("recall", Math.round(rouge1Recall * 100.0) / 100.0);
+        metrics.put("fScore", Math.round(rouge1F1 * 100.0) / 100.0);
+
+        return metrics;
     }
     private String processPythonScript(String filePath) throws IOException, InterruptedException {
         Process process = getProcess(filePath);
@@ -214,24 +258,6 @@ public class FileUploadController {
         return process;
     }
 
-    private String processResult(String jsonOutput) {
-        try {
-            ObjectMapper mapper = new ObjectMapper();
-            JsonNode resultJson = mapper.readTree(jsonOutput);
-
-            if (resultJson.has("error")) {
-                throw new RuntimeException("Python script error: " + resultJson.get("error").asText());
-            }
-
-            String transcription = resultJson.get("transcription").asText();
-            String summary = resultJson.get("summary").asText();
-
-            return "Transcription:\n" + transcription + "\n\nSummary:\n" + summary;
-        } catch (Exception e) {
-            System.err.println("Error parsing JSON: " + jsonOutput);
-            throw new RuntimeException("Error processing Python script output: " + e.getMessage(), e);
-        }
-    }
 
 
     @ExceptionHandler(StorageFileNotFoundException.class)

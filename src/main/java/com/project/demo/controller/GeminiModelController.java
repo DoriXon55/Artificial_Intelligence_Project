@@ -2,6 +2,7 @@ package com.project.demo.controller;
 
 import com.project.demo.model.GeminiModel;
 import com.project.demo.model.ModelListResponse;
+import org.hibernate.validator.internal.constraintvalidators.bv.notempty.NotEmptyValidatorForArraysOfBoolean;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpHeaders;
@@ -17,10 +18,7 @@ import java.io.IOException;
 import java.io.InputStreamReader;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
+import java.util.*;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
@@ -99,6 +97,8 @@ public class GeminiModelController {
         
         return result;
     }
+    
+
     
     private Map<String, Object> processPythonText(String text) throws IOException {
         Map<String, Object> result = new HashMap<>();

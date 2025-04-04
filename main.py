@@ -12,6 +12,8 @@ from pathlib import Path
 # Konfiguracja logowania
 logging.basicConfig(level=logging.INFO, stream=sys.stderr, format='%(message)s')
 
+
+    
 def get_file_hash(file_path):
     """Generuje hash pliku do identyfikacji w cache"""
     hasher = hashlib.md5()
@@ -116,7 +118,7 @@ def main():
         # Przygotowanie wyniku
         output = {
             "transcription": transcription,
-            "summary": summary[0]["summary_text"]
+            "summary": summary[0]["summary_text"],
         }
 
         # Zapis do cache
