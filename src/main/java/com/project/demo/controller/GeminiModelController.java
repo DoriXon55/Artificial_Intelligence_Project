@@ -37,7 +37,6 @@ public class GeminiModelController {
     private final RestClient restClient;
     private final ObjectMapper objectMapper;
     
-    // Keep track of user preferences (in a real app, this would be in a database)
     private static final Map<String, UserPreference> userPreferences = new HashMap<>();
     
     @Autowired
@@ -48,7 +47,6 @@ public class GeminiModelController {
         this.objectMapper = objectMapper;
     }
 
-    // Keep original JSON endpoint but at a different URL
     @GetMapping("/api/models")
     @ResponseBody
     public List<GeminiModel> apiModels() {
@@ -84,17 +82,14 @@ public class GeminiModelController {
             String modelId = (String) request.get("modelId");
             Boolean savePreference = (Boolean) request.getOrDefault("savePreference", false);
             
-            // Save user preference if requested
             if (savePreference) {
                 userPreferences.put(sessionId, new UserPreference(method, modelId));
                 result.put("preferenceSaved", true);
             }
             
             if ("python".equals(method)) {
-                // Process with Python script
                 result.putAll(processPythonText(prompt));
             } else {
-                // Process with Gemini
                 result.put("response", processWithGemini(prompt, modelId));
             }
             
@@ -123,7 +118,6 @@ public class GeminiModelController {
             processBuilder.redirectErrorStream(false);
             Process process = processBuilder.start();
             
-            // Read output
             BufferedReader stdoutReader = new BufferedReader(new InputStreamReader(process.getInputStream()));
             StringBuilder output = new StringBuilder();
             String line;
@@ -131,7 +125,6 @@ public class GeminiModelController {
                 output.append(line);
             }
             
-            // Parse JSON output
             ObjectMapper mapper = new ObjectMapper();
             Map<String, Object> pythonResult = mapper.readValue(output.toString(), Map.class);
             
@@ -141,11 +134,9 @@ public class GeminiModelController {
         } catch (Exception e) {
             result.put("error", "Error processing text with Python script: " + e.getMessage());
         } finally {
-            // Delete temporary file
             try {
                 Files.deleteIfExists(tempFile);
             } catch (IOException e) {
-                // Just log, don't fail the whole operation
                 System.err.println("Failed to delete temporary file: " + e.getMessage());
             }
         }
@@ -155,41 +146,30 @@ public class GeminiModelController {
     
     public String processWithGemini(String text, String modelId) {
         try {
-            // Logowanie do debugowania
             System.out.println("Calling Gemini API with text: " + text.substring(0, Math.min(50, text.length())) + "...");
             System.out.println("Using model: " + (modelId != null ? modelId : DEFAULT_MODEL));
             
-            // Poprawny format dla Gemini API
             ObjectNode requestBody = objectMapper.createObjectNode();
             
-            // Tworzenie tablicy contents zawierającej jeden element z polami role i parts
-            ObjectNode contentNode = objectMapper.createObjectNode();  // Zmieniono nazwę z content na contentNode
+            ObjectNode contentNode = objectMapper.createObjectNode();
             
-            // Tworzenie tablicy parts zawierającej element text
             ObjectNode textPart = objectMapper.createObjectNode();
             textPart.put("text", text);
             
-            // Dodanie części do tablicy parts
             contentNode.set("parts", objectMapper.createArrayNode().add(textPart));
             
-            // Dodanie role (opcjonalne, ale może być wymagane)
             contentNode.put("role", "user");
             
-            // Dodanie content do tablicy contents
             requestBody.set("contents", objectMapper.createArrayNode().add(contentNode));
             
-            // Konfiguracja generacji
             ObjectNode generationConfig = requestBody.putObject("generationConfig");
             generationConfig.put("temperature", 0.7);
             generationConfig.put("maxOutputTokens", 800);
             
-            // Use the model ID provided or fall back to default
             String model = modelId != null && !modelId.isEmpty() ? modelId : DEFAULT_MODEL;
             
-            // Print request for debugging
             System.out.println("Request body: " + requestBody.toPrettyString());
             
-            // Make API request with x-goog-api-key header
             ResponseEntity<Map> response = restClient.post()
                     .uri("/v1/models/" + model + ":generateContent")
                     .header(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
@@ -198,19 +178,17 @@ public class GeminiModelController {
                     .retrieve()
                     .toEntity(Map.class);
             
-            // Log response for debugging
             System.out.println("API response status: " + response.getStatusCode());
             if (response.getBody() != null) {
                 System.out.println("Response contains keys: " + response.getBody().keySet());
             }
             
-            // Extract the response text from Gemini's response format
             if (response.getBody() != null && response.getBody().containsKey("candidates")) {
                 List<Map<String, Object>> candidates = (List<Map<String, Object>>) response.getBody().get("candidates");
                 if (!candidates.isEmpty()) {
                     Map<String, Object> firstCandidate = candidates.get(0);
                     if (firstCandidate.containsKey("content")) {
-                        Map<String, Object> responseContent = (Map<String, Object>) firstCandidate.get("content");  // Zmieniono nazwę z content na responseContent
+                        Map<String, Object> responseContent = (Map<String, Object>) firstCandidate.get("content");
                         if (responseContent.containsKey("parts")) {
                             List<Map<String, Object>> parts = (List<Map<String, Object>>) responseContent.get("parts");
                             if (!parts.isEmpty() && parts.get(0).containsKey("text")) {
@@ -224,17 +202,15 @@ public class GeminiModelController {
             return "No valid response from Gemini API. Response: " + response.getBody();
             
         } catch (Exception e) {
-            e.printStackTrace();  // Dodaj pełny stack trace, aby zobaczyć dokładnie, gdzie występuje błąd
+            e.printStackTrace();
             return "Error calling Gemini API: " + e.getMessage();
         }
     }
     
-    // Method to get the user's processing preference
     public static UserPreference getUserPreference(String sessionId) {
         return userPreferences.get(sessionId);
     }
     
-    // Class to store user preferences
     public static class UserPreference {
         private final String processingMethod;
         private final String modelId;
@@ -253,7 +229,6 @@ public class GeminiModelController {
         }
     }
 
-    // Dodaj getter dla mapy preferencji
     public static Map<String, UserPreference> getUserPreferences() {
         return userPreferences;
     }

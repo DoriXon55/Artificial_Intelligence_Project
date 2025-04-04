@@ -62,7 +62,6 @@ public class FileUploadController {
                 "attachment; filename=\"" + file.getFilename() + "\"").body(file);
     }
     
-    // New endpoint to get user preferences
     @GetMapping("/api/preferences")
     @ResponseBody
     public Map<String, String> getUserPreferences(HttpSession session) {
@@ -73,7 +72,6 @@ public class FileUploadController {
             preferences.put("method", userPref.getProcessingMethod());
             preferences.put("modelId", userPref.getModelId());
         } else {
-            // Default preferences
             preferences.put("method", "python");
             preferences.put("modelId", "");
         }
@@ -81,7 +79,6 @@ public class FileUploadController {
         return preferences;
     }
     
-    // New endpoint to save user preferences
     @PostMapping("/api/preferences")
     @ResponseBody
     public Map<String, Boolean> saveUserPreferences(@RequestBody Map<String, String> request, HttpSession session) {
@@ -115,13 +112,10 @@ public class FileUploadController {
                 return "redirect:/";
             }
 
-            // Zapisz plik
             storageService.store(file);
 
-            // Pobierz ścieżkę do zapisanego pliku
             String filePath = storageService.getStorageLocation().resolve(originalFileName).toAbsolutePath().toString();
 
-            // Check user preference for processing method
             UserPreference preference = GeminiModelController.getUserPreference(session.getId());
             
             String transcription;
@@ -132,12 +126,7 @@ public class FileUploadController {
             if (preference != null && "gemini".equals(preference.getProcessingMethod())) {
                 useGemini = true;
                 modelId = preference.getModelId();
-                
-                // Process with Gemini
-                // This would require extracting audio to text first, then sending to Gemini
-                // This is a simplified version
-                
-                // First get transcription with Python script
+
                 String jsonOutput = processPythonScript(filePath);
                 ObjectMapper mapper = new ObjectMapper();
                 JsonNode resultJson = mapper.readTree(jsonOutput);
@@ -147,9 +136,7 @@ public class FileUploadController {
                 }
                 
                 transcription = resultJson.get("transcription").asText();
-                
-                // Then summarize with Gemini
-                // Call GeminiModelController to process the transcription
+
                 String geminiSummary = "";
                 try {
                     geminiSummary = this.geminiModelController.processWithGemini(
@@ -164,7 +151,6 @@ public class FileUploadController {
                 summary = geminiSummary;
                 
             } else {
-                // Default to Python script processing
                 String jsonOutput = processPythonScript(filePath);
                 ObjectMapper mapper = new ObjectMapper();
                 JsonNode resultJson = mapper.readTree(jsonOutput);
@@ -195,7 +181,6 @@ public class FileUploadController {
     private String processPythonScript(String filePath) throws IOException, InterruptedException {
         Process process = getProcess(filePath);
 
-        // Odczyt standardowego wyjścia (JSON)
         BufferedReader stdoutReader = new BufferedReader(new InputStreamReader(process.getInputStream()));
         StringBuilder stdoutOutput = new StringBuilder();
         String line;
@@ -204,13 +189,10 @@ public class FileUploadController {
         }
 
 
-        // Sprawdź czy mamy jakieś wyjście
         String jsonOutput = stdoutOutput.toString().trim();
         if (jsonOutput.isEmpty()) {
             throw new RuntimeException("No output received from Python script");
         }
-
-        // Jeśli wszystko się powiodło, zwróć JSON
         return jsonOutput;
     }
 
@@ -226,10 +208,8 @@ public class FileUploadController {
                 filePath
         );
 
-        // NIE przekierowuj stderr do stdout - chcemy je rozdzielić
         processBuilder.redirectErrorStream(false);
 
-        // Uruchomienie procesu
         Process process = processBuilder.start();
         return process;
     }
